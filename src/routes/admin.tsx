@@ -167,15 +167,16 @@ function ProductForm({ initial, onClose }: { initial: Partial<Product>; onClose:
           if (!p.images?.length) return alert("أضف صورة واحدة على الأقل");
           const features = feat.split("\n").map((s) => s.trim()).filter(Boolean);
           setBusy(true);
-          const r = await translateProduct({ data: { name: p.name ?? "", description: p.description ?? "", features } }).catch(() => null);
           try {
-            await actions.saveProduct({ ...(p as Product), features, tr: r?.ok ? r.tr : p.tr });
-            if (!r?.ok && !p.tr) {
-              alert("تم حفظ المنتج بنجاح، لكن خدمة الترجمة لم تستجب هذه المرة. يمكنك إعادة فتح المنتج وحفظه لاحقاً لإعادة المحاولة.");
+            const r = await translateProduct({ data: { name: p.name ?? "", description: p.description ?? "", features } });
+            if (!r.ok) {
+              alert("لم تكتمل ترجمة المنتج إلى اللغات الثلاث، لذلك لم يتم حفظه. حاول مرة أخرى.\n\n" + r.error);
+              return;
             }
+            await actions.saveProduct({ ...(p as Product), features, tr: r.tr });
             onClose();
           } catch (error) {
-            alert(error instanceof Error ? "تعذر حفظ المنتج: " + error.message : "تعذر حفظ المنتج");
+            alert(error instanceof Error ? "تعذرت ترجمة المنتج أو حفظه: " + error.message : "تعذرت ترجمة المنتج أو حفظه. حاول مرة أخرى.");
           } finally { setBusy(false); }
         }}
         className="max-h-[92vh] w-full max-w-lg space-y-3 overflow-y-auto rounded-t-2xl border bg-popover p-5 sm:rounded-2xl">
