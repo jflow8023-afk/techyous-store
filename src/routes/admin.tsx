@@ -143,7 +143,7 @@ function Products() {
           <div className="min-w-0 flex-1"><p className="truncate font-semibold">{p.name}</p><p className="text-xs text-muted-foreground">{catLabel(p.category)} · المخزون: {p.stock}</p></div>
           <span className="hidden font-bold text-primary sm:block">{formatMAD(p.price)}</span>
           <button onClick={() => setEdit(p)} className="rounded-lg bg-secondary p-2"><Pencil className="h-4 w-4" /></button>
-          <button onClick={() => confirm("حذف هذا المنتج؟") && actions.deleteProduct(p.id)} className="rounded-lg bg-secondary p-2 text-destructive"><Trash2 className="h-4 w-4" /></button>
+          <button onClick={async () => { if (!confirm("حذف هذا المنتج؟")) return; try { await actions.deleteProduct(p.id); } catch (error) { alert(error instanceof Error ? error.message : "تعذر حذف المنتج"); } }} className="rounded-lg bg-secondary p-2 text-destructive"><Trash2 className="h-4 w-4" /></button>
         </div>
       ))}</div>
       {edit && <ProductForm initial={edit} onClose={() => setEdit(null)} />}
@@ -168,10 +168,13 @@ function ProductForm({ initial, onClose }: { initial: Partial<Product>; onClose:
           const features = feat.split("\n").map((s) => s.trim()).filter(Boolean);
           setBusy(true);
           const r = await translateProduct({ data: { name: p.name ?? "", description: p.description ?? "", features } }).catch(() => null);
-          setBusy(false);
-          actions.saveProduct({ ...(p as Product), features, tr: r?.ok ? r.tr : undefined });
-          if (!r?.ok) alert("تم الحفظ، لكن تعذّرت الترجمة التلقائية. أعد الحفظ لاحقاً للترجمة.");
-          onClose();
+          try {
+            await actions.saveProduct({ ...(p as Product), features, tr: r?.ok ? r.tr : undefined });
+            if (!r?.ok) alert("تم الحفظ، لكن تعذّرت الترجمة التلقائية. أعد الحفظ لاحقاً للترجمة.");
+            onClose();
+          } catch (error) {
+            alert(error instanceof Error ? "تعذر حفظ المنتج: " + error.message : "تعذر حفظ المنتج");
+          } finally { setBusy(false); }
         }}
         className="max-h-[92vh] w-full max-w-lg space-y-3 overflow-y-auto rounded-t-2xl border bg-popover p-5 sm:rounded-2xl">
         <div className="flex items-center justify-between"><h3 className="text-lg font-bold">{p.id ? "تعديل المنتج" : "منتج جديد"}</h3><button type="button" onClick={onClose}><X className="h-5 w-5" /></button></div>
@@ -218,8 +221,8 @@ function Orders() {
           <div className="grid min-w-0 gap-2 border-t pt-2 sm:flex sm:flex-wrap sm:items-center sm:justify-between">
             <span className="font-black">{formatMAD(o.total)}{o.shipping != null && <span className="ms-1 text-xs font-normal text-muted-foreground">(توصيل {o.shipping})</span>}</span>
             <div className="flex min-w-0 items-center gap-2">
-              <select value={o.status} onChange={(e) => actions.setOrderStatus(o.id, e.target.value as OrderStatus)} className="input-field w-auto py-1.5 text-sm">{(Object.keys(STATUS) as OrderStatus[]).map((s) => <option key={s} value={s}>{STATUS[s].label}</option>)}</select>
-              <button onClick={() => confirm("حذف الطلب؟") && actions.deleteOrder(o.id)} className="p-1.5 text-destructive"><Trash2 className="h-4 w-4" /></button>
+              <select value={o.status} onChange={async (e) => { try { await actions.setOrderStatus(o.id, e.target.value as OrderStatus); } catch (error) { alert(error instanceof Error ? error.message : "تعذر تحديث الطلب"); } }} className="input-field w-auto py-1.5 text-sm">{(Object.keys(STATUS) as OrderStatus[]).map((s) => <option key={s} value={s}>{STATUS[s].label}</option>)}</select>
+              <button onClick={async () => { if (!confirm("حذف الطلب؟")) return; try { await actions.deleteOrder(o.id); } catch (error) { alert(error instanceof Error ? error.message : "تعذر حذف الطلب"); } }} className="p-1.5 text-destructive"><Trash2 className="h-4 w-4" /></button>
             </div>
           </div>
           <p className="text-xs text-muted-foreground">{new Date(o.createdAt).toLocaleString("ar-MA")} · الدفع عند الاستلام</p>
