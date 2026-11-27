@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { BarChart3, Package, ShoppingBag, LogOut, Plus, Pencil, Trash2, X, Lock, Phone, MapPin } from "lucide-react";
 import { actions, CATEGORIES, catLabel, fileToDataUrl, formatMAD, useStore, type OrderStatus, type Product } from "@/lib/store";
 import { normalizeCategory } from "@/lib/categories";
+import { supabase, isStoreAdmin, sendAdminSignInLink, signOutAdmin } from "@/lib/supabase";
+import { refreshCloudData } from "@/lib/store";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({
@@ -20,7 +22,6 @@ export const Route = createFileRoute("/admin")({
   component: AdminPage,
 });
 
-const PIN = "101528";
 const STATUS: Record<OrderStatus, { label: string; cls: string }> = {
   pending: { label: "قيد الانتظار", cls: "bg-warning/20 text-warning" },
   shipped: { label: "تم الشحن", cls: "bg-primary/20 text-primary" },
@@ -29,25 +30,52 @@ const STATUS: Record<OrderStatus, { label: string; cls: string }> = {
 
 function AdminPage() {
   const [authed, setAuthed] = useState(false);
-  useEffect(() => { setAuthed(sessionStorage.getItem("ty-admin") === "1"); }, []);
-  if (!authed) return <PinGate onOk={() => { sessionStorage.setItem("ty-admin", "1"); setAuthed(true); }} />;
-  return <Dashboard onLogout={() => { sessionStorage.removeItem("ty-admin"); setAuthed(false); }} />;
+  const [checking, setChecking] = useState(true);
+  useEffect(() => {
+    let alive = true;
+    const check = async () => {
+      const ok = await isStoreAdmin();
+      if (alive) {
+        setAuthed(ok);
+        setChecking(false);
+        if (ok) await refreshCloudData();
+      }
+    };
+    void check();
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+      const ok = session?.user?.email?.toLowerCase() === "jflow8023@gmail.com";
+      setAuthed(ok);
+      if (ok) window.setTimeout(() => { void refreshCloudData(); }, 0);
+    });
+    return () => { alive = false; data.subscription.unsubscribe(); };
+  }, []);
+  if (checking) return <div className="flex min-h-screen items-center justify-center text-muted-foreground">جارٍ التحقق من الدخول...</div>;
+  if (!authed) return <AdminLogin />;
+  return <Dashboard onLogout={async () => { await signOutAdmin(); setAuthed(false); }} />;
 }
 
-function PinGate({ onOk }: { onOk: () => void }) {
-  const [pin, setPin] = useState("");
-  const [err, setErr] = useState(false);
-  useEffect(() => { if (pin.length === 6) { if (pin === PIN) onOk(); else { setErr(true); setPin(""); } } }, [pin]);
+function AdminLogin() {
+  const [email, setEmail] = useState("jflow8023@gmail.com");
+  const [busy, setBusy] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [err, setErr] = useState("");
   return (
     <div className="flex min-h-screen items-center justify-center bg-glow px-4">
-      <div className="w-full max-w-sm rounded-2xl border bg-card p-6 text-center shadow-glow">
+      <form onSubmit={async (e) => {
+        e.preventDefault(); setBusy(true); setErr("");
+        try { await sendAdminSignInLink(email); setSent(true); }
+        catch (error) { setErr(error instanceof Error ? error.message : "تعذر إرسال رابط الدخول."); }
+        finally { setBusy(false); }
+      }} className="w-full max-w-sm rounded-2xl border bg-card p-6 text-center shadow-glow">
         <Lock className="mx-auto h-10 w-10 text-primary" />
         <h1 className="mt-3 text-xl font-bold">دخول المسؤول</h1>
-        <p className="mt-1 text-sm text-muted-foreground">أدخل الرمز السري المكون من 6 أرقام</p>
-        <input autoFocus dir="ltr" inputMode="numeric" maxLength={6} value={pin} onChange={(e) => { setErr(false); setPin(e.target.value.replace(/\D/g, "")); }} className="input-field mt-5 text-center text-2xl tracking-[0.6em]" placeholder="••••••" />
-        {err && <p className="mt-2 text-sm text-destructive">الرمز غير صحيح</p>}
+        <p className="mt-1 text-sm text-muted-foreground">سنرسل رابط دخول آمن إلى بريد صاحب المتجر</p>
+        <input required type="email" dir="ltr" value={email} onChange={(e) => setEmail(e.target.value)} className="input-field mt-5 text-center" />
+        {sent && <p className="mt-3 text-sm text-success">تم إرسال رابط الدخول. افتح بريدك واضغط على الرابط للمتابعة.</p>}
+        {err && <p className="mt-3 text-sm text-destructive">{err}</p>}
+        <button disabled={busy} className="btn-primary mt-4 w-full py-3 disabled:opacity-60">{busy ? "جارٍ الإرسال..." : "إرسال رابط الدخول"}</button>
         <Link to="/" className="mt-5 inline-block text-sm text-muted-foreground hover:text-primary">العودة للمتجر</Link>
-      </div>
+      </form>
     </div>
   );
 }
@@ -115,7 +143,7 @@ function Products() {
           <div className="min-w-0 flex-1"><p className="truncate font-semibold">{p.name}</p><p className="text-xs text-muted-foreground">{catLabel(p.category)} · المخزون: {p.stock}</p></div>
           <span className="hidden font-bold text-primary sm:block">{formatMAD(p.price)}</span>
           <button onClick={() => setEdit(p)} className="rounded-lg bg-secondary p-2"><Pencil className="h-4 w-4" /></button>
-          <button onClick={() => confirm("حذف هذا المنتج؟") && actions.deleteProduct(p.id)} className="rounded-lg bg-secondary p-2 text-destructive"><Trash2 className="h-4 w-4" /></button>
+          <button onClick={async () => { if (!confirm("حذف هذا المنتج؟")) return; try { await actions.deleteProduct(p.id); } catch (error) { alert(error instanceof Error ? error.message : "تعذر حذف المنتج"); } }} className="rounded-lg bg-secondary p-2 text-destructive"><Trash2 className="h-4 w-4" /></button>
         </div>
       ))}</div>
       {edit && <ProductForm initial={edit} onClose={() => setEdit(null)} />}
@@ -127,6 +155,8 @@ function ProductForm({ initial, onClose }: { initial: Partial<Product>; onClose:
   const [p, setP] = useState({ ...initial, category: normalizeCategory(initial.category ?? "tv") });
   const [feat, setFeat] = useState((initial.features ?? []).join("\n"));
   const [busy, setBusy] = useState(false);
+  const [translations, setTranslations] = useState<Product["tr"]>(initial.tr ?? {});
+  const [translationError, setTranslationError] = useState("");
   const upload = async (files: FileList | null) => {
     if (!files) return;
     const urls = await Promise.all([...files].map((f) => fileToDataUrl(f)));
@@ -139,22 +169,45 @@ function ProductForm({ initial, onClose }: { initial: Partial<Product>; onClose:
           if (!p.images?.length) return alert("أضف صورة واحدة على الأقل");
           const features = feat.split("\n").map((s) => s.trim()).filter(Boolean);
           setBusy(true);
-          const r = await translateProduct({ data: { name: p.name ?? "", description: p.description ?? "", features } }).catch(() => null);
-          setBusy(false);
-          actions.saveProduct({ ...(p as Product), features, tr: r?.ok ? r.tr : undefined });
-          if (!r?.ok) alert("تم الحفظ، لكن تعذّرت الترجمة التلقائية. أعد الحفظ لاحقاً للترجمة.");
-          onClose();
+          try {
+            let tr = translations;
+            const complete = (["ar", "fr", "en"] as const).every((lang) => Boolean(tr?.[lang]?.name?.trim() && tr?.[lang]?.description?.trim() && Array.isArray(tr?.[lang]?.features)));
+            if (!complete) {
+              const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+              if (sessionError || !sessionData.session?.access_token) {
+                setTranslationError("انتهت جلسة الإدارة. سجّل الدخول مجدداً ثم أعد المحاولة.");
+                return;
+              }
+              const r = await translateProduct({ data: {
+                name: p.name ?? "",
+                description: p.description ?? "",
+                features,
+                accessToken: sessionData.session.access_token,
+              } });
+              if (!r.ok) {
+                setTranslationError(r.error);
+                return;
+              }
+              tr = r.tr;
+              setTranslations(tr);
+            }
+            setTranslationError("");
+            await actions.saveProduct({ ...(p as Product), features, tr });
+            onClose();
+          } catch (error) {
+            alert(error instanceof Error ? "تعذرت ترجمة المنتج أو حفظه: " + error.message : "تعذرت ترجمة المنتج أو حفظه. حاول مرة أخرى.");
+          } finally { setBusy(false); }
         }}
         className="max-h-[92vh] w-full max-w-lg space-y-3 overflow-y-auto rounded-t-2xl border bg-popover p-5 sm:rounded-2xl">
         <div className="flex items-center justify-between"><h3 className="text-lg font-bold">{p.id ? "تعديل المنتج" : "منتج جديد"}</h3><button type="button" onClick={onClose}><X className="h-5 w-5" /></button></div>
-        <input required placeholder="اسم المنتج" value={p.name} onChange={(e) => setP({ ...p, name: e.target.value })} className="input-field" />
+        <input required placeholder="اسم المنتج" value={p.name} onChange={(e) => { setP({ ...p, name: e.target.value }); setTranslations({}); }} className="input-field" />
         <div className="grid grid-cols-3 gap-2">
           <select value={p.category} onChange={(e) => setP({ ...p, category: e.target.value })} className="input-field col-span-3 sm:col-span-1">{CATEGORIES.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}</select>
           <label className="col-span-3 text-xs sm:col-span-1">السعر (درهم)<input required type="number" min={0} value={p.price} onChange={(e) => setP({ ...p, price: +e.target.value })} className="input-field" /></label>
           <label className="col-span-3 text-xs sm:col-span-1">المخزون<input required type="number" min={0} value={p.stock} onChange={(e) => setP({ ...p, stock: +e.target.value })} className="input-field" /></label>
         </div>
-        <textarea placeholder="الوصف" rows={2} value={p.description} onChange={(e) => setP({ ...p, description: e.target.value })} className="input-field" />
-        <textarea placeholder="المميزات (ميزة في كل سطر)" rows={3} value={feat} onChange={(e) => setFeat(e.target.value)} className="input-field" />
+        <textarea placeholder="الوصف" rows={2} value={p.description} onChange={(e) => { setP({ ...p, description: e.target.value }); setTranslations({}); }} className="input-field" />
+        <textarea placeholder="المميزات (ميزة في كل سطر)" rows={3} value={feat} onChange={(e) => { setFeat(e.target.value); setTranslations({}); }} className="input-field" />
         <div>
           <div className="flex flex-wrap gap-2">{p.images?.map((src, i) => (
             <div key={i} className="relative"><img src={src} alt="" className="h-16 w-16 rounded-lg object-cover" />
@@ -163,7 +216,16 @@ function ProductForm({ initial, onClose }: { initial: Partial<Product>; onClose:
             <label className="grid h-16 w-16 cursor-pointer place-items-center rounded-lg border border-dashed text-muted-foreground hover:border-primary"><Plus className="h-5 w-5" /><input type="file" accept="image/*" multiple hidden onChange={(e) => upload(e.target.files)} /></label>
           </div>
         </div>
-        <p className="text-xs text-muted-foreground">يُترجم المنتج تلقائياً إلى العربية والفرنسية والإنجليزية عند الحفظ.</p>
+        <p className="text-xs text-muted-foreground">أدخل الترجمات يدوياً للغات الثلاث، أو اتركها فارغة ليتم توليدها تلقائياً عند الحفظ. لن يتم حفظ المنتج قبل اكتمال الترجمات.</p>
+        {(["ar", "fr", "en"] as const).map((lang) => (
+          <fieldset key={lang} className="space-y-2 rounded-xl border p-3">
+            <legend className="px-2 font-bold">{lang === "ar" ? "العربية" : lang === "fr" ? "Français" : "English"}</legend>
+            <input className="input-field" placeholder="اسم المنتج" value={translations?.[lang]?.name ?? ""} onChange={(e) => setTranslations((old) => ({ ...old, [lang]: { name: e.target.value, description: old?.[lang]?.description ?? "", features: old?.[lang]?.features ?? [] } }))} />
+            <textarea className="input-field" rows={2} placeholder="الوصف" value={translations?.[lang]?.description ?? ""} onChange={(e) => setTranslations((old) => ({ ...old, [lang]: { name: old?.[lang]?.name ?? "", description: e.target.value, features: old?.[lang]?.features ?? [] } }))} />
+            <textarea className="input-field" rows={2} placeholder="المميزات (كل ميزة في سطر)" value={(translations?.[lang]?.features ?? []).join("\n")} onChange={(e) => setTranslations((old) => ({ ...old, [lang]: { name: old?.[lang]?.name ?? "", description: old?.[lang]?.description ?? "", features: e.target.value.split("\n").map((x) => x.trim()).filter(Boolean) } }))} />
+          </fieldset>
+        ))}
+        {translationError && <p className="text-sm text-destructive">تعذرت الترجمة التلقائية: {translationError}. يمكنك كتابة أسماء المنتجات باللغات الثلاث أعلاه ثم الضغط على حفظ.</p>}
         <button type="submit" disabled={busy} className="btn-primary w-full py-3 disabled:opacity-60">{busy ? "جارٍ الترجمة والحفظ..." : "حفظ"}</button>
       </form>
     </div>
@@ -190,8 +252,8 @@ function Orders() {
           <div className="grid min-w-0 gap-2 border-t pt-2 sm:flex sm:flex-wrap sm:items-center sm:justify-between">
             <span className="font-black">{formatMAD(o.total)}{o.shipping != null && <span className="ms-1 text-xs font-normal text-muted-foreground">(توصيل {o.shipping})</span>}</span>
             <div className="flex min-w-0 items-center gap-2">
-              <select value={o.status} onChange={(e) => actions.setOrderStatus(o.id, e.target.value as OrderStatus)} className="input-field w-auto py-1.5 text-sm">{(Object.keys(STATUS) as OrderStatus[]).map((s) => <option key={s} value={s}>{STATUS[s].label}</option>)}</select>
-              <button onClick={() => confirm("حذف الطلب؟") && actions.deleteOrder(o.id)} className="p-1.5 text-destructive"><Trash2 className="h-4 w-4" /></button>
+              <select value={o.status} onChange={async (e) => { try { await actions.setOrderStatus(o.id, e.target.value as OrderStatus); } catch (error) { alert(error instanceof Error ? error.message : "تعذر تحديث الطلب"); } }} className="input-field w-auto py-1.5 text-sm">{(Object.keys(STATUS) as OrderStatus[]).map((s) => <option key={s} value={s}>{STATUS[s].label}</option>)}</select>
+              <button onClick={async () => { if (!confirm("حذف الطلب؟")) return; try { await actions.deleteOrder(o.id); } catch (error) { alert(error instanceof Error ? error.message : "تعذر حذف الطلب"); } }} className="p-1.5 text-destructive"><Trash2 className="h-4 w-4" /></button>
             </div>
           </div>
           <p className="text-xs text-muted-foreground">{new Date(o.createdAt).toLocaleString("ar-MA")} · الدفع عند الاستلام</p>

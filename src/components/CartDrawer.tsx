@@ -97,14 +97,18 @@ export function CartDrawer() {
             </div>
           </>
         ) : (
-          <form className="flex min-h-0 flex-1 flex-col overflow-y-auto" onSubmit={(e) => {
+          <form className="flex min-h-0 flex-1 flex-col overflow-y-auto" onSubmit={async (e) => {
             e.preventDefault(); if (!phoneOk || belowMin) return;
             const city = CITIES.find((c) => c.id === form.cityId);
             if (!city) return;
             const items = waItems();
-            const id = actions.placeOrder({ name: form.name, phone: form.phone, city: city.ar, address: form.address }, form.cityId);
-            setPlaced({ id, items, subtotal, shipping, total: subtotal + shipping, name: form.name, phone: form.phone, city: city[lang], address: form.address });
-            setOrderId(id); setStep("done"); setForm({ ...form, address: "" });
+            try {
+              const id = await actions.placeOrder({ name: form.name, phone: form.phone, city: city.ar, address: form.address }, form.cityId);
+              setPlaced({ id, items, subtotal, shipping, total: subtotal + shipping, name: form.name, phone: form.phone, city: city[lang], address: form.address });
+              setOrderId(id); setStep("done"); setForm({ ...form, address: "" });
+            } catch (error) {
+              alert(error instanceof Error ? "تعذر حفظ الطلب: " + error.message : "تعذر حفظ الطلب، حاول مرة أخرى.");
+            }
           }}>
             <div className="flex-1 space-y-4 p-4">
               <label className="block space-y-1.5"><span className="text-sm font-semibold">{t("name")}</span><input required maxLength={80} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="input-field" /></label>
