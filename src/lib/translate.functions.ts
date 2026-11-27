@@ -38,8 +38,19 @@ export const translateProduct = createServerFn({ method: "POST" })
     const authClient = createClient(supabaseUrl, supabaseAnonKey, { auth: { persistSession: false, autoRefreshToken: false } });
     const { data: authData, error: authError } = await authClient.auth.getUser(data.accessToken);
     if (authError || authData.user?.email?.toLowerCase() !== "jflow8023@gmail.com") return { ok: false, error: "غير مسموح: يجب استعمال بريد صاحب المتجر." };
-    const token = process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN;
-    if (!token) return { ok: false, error: "AI Gateway authentication is not configured" };
+    // Vercel Functions expose the OIDC token on the incoming request context,
+    // not necessarily through process.env. Resolve it with Vercel's runtime helper.
+    let token = process.env.AI_GATEWAY_API_KEY;
+    if (!token) {
+      try {
+        const { getVercelOidcToken } = await import("@vercel/oidc");
+        token = await getVercelOidcToken();
+      } catch (error) {
+        console.error("Unable to obtain Vercel OIDC token for AI Gateway:", error);
+        return { ok: false, error: "تعذر الاتصال بخدمة الترجمة حالياً. حاول مرة أخرى بعد قليل." };
+      }
+    }
+    if (!token) return { ok: false, error: "خدمة الترجمة غير مهيأة على الخادم." };
 
     try {
       const res = await fetch("https://ai-gateway.vercel.sh/v1/chat/completions", {
