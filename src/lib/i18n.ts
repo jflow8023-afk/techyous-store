@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { actions, useStore, type Product } from "./store";
 import { normalizeCategory } from "./categories";
 
@@ -92,7 +93,7 @@ export const CAT_LABELS: Record<string, Record<Lang, string>> = {
 
 export function useT() {
   const lang = useStore((s) => s.lang);
-  const t == (k: Key, vars?: Record<string, string | number>) => {
+  const t = (k: Key, vars?: Record<string, string | number>) => {
     let s: string = dict[k][lang];
     if (vars) for (const [a, b] of Object.entries(vars)) s = s.replace(`{${a}}`, String(b));
     return s;
