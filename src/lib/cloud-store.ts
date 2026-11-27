@@ -21,7 +21,7 @@ const toOrder = (o: DbOrder): Order => ({
 });
 const fromProduct = (p: Product): DbProduct => ({
   id:p.id,name:p.name,category:p.category,price:p.price,stock:p.stock,images:p.images,
-  description:p.description,features:p.features,translations:p.tr ?? null,active:true,
+  description:p.description,features:p.features,translations:p.tr ?? {},active:true,
 });
 
 async function uploadImage(src: string, index: number) {
