@@ -109,6 +109,7 @@ const uid = () => Math.random().toString(36).slice(2, 9);
 
 export const actions = {
   setLang: (lang: State["lang"]) => set(() => ({ lang })),
+  setProductTranslations: (id: string, tr: NonNullable<Product["tr"]>) => set((s) => ({ products: s.products.map((p) => p.id === id ? { ...p, tr: { ...p.tr, ...tr } } : p) })),
   setCartOpen: (cartOpen: boolean) => set(() => ({ cartOpen })),
   addToCart: (productId: string) => set((s) => {
     const ex = s.cart.find((c) => c.productId === productId);
