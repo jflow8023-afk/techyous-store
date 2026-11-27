@@ -170,12 +170,19 @@ function ProductForm({ initial, onClose }: { initial: Partial<Product>; onClose:
           const features = feat.split("\n").map((s) => s.trim()).filter(Boolean);
           setBusy(true);
           try {
-            const r = await translateProduct({ data: { name: p.name ?? "", description: p.description ?? "", features } });
-            if (!r.ok) {
-              alert("لم تكتمل ترجمة المنتج إلى اللغات الثلاث، لذلك لم يتم حفظه. حاول مرة أخرى.\n\n" + r.error);
-              return;
+            let tr = translations;
+            const complete = (["ar", "fr", "en"] as const).every((lang) => Boolean(tr?.[lang]?.name?.trim()));
+            if (!complete) {
+              const r = await translateProduct({ data: { name: p.name ?? "", description: p.description ?? "", features } });
+              if (!r.ok) {
+                setTranslationError(r.error);
+                return;
+              }
+              tr = r.tr;
+              setTranslations(tr);
             }
-            await actions.saveProduct({ ...(p as Product), features, tr: r.tr });
+            setTranslationError("");
+            await actions.saveProduct({ ...(p as Product), features, tr });
             onClose();
           } catch (error) {
             alert(error instanceof Error ? "تعذرت ترجمة المنتج أو حفظه: " + error.message : "تعذرت ترجمة المنتج أو حفظه. حاول مرة أخرى.");
@@ -205,7 +212,7 @@ function ProductForm({ initial, onClose }: { initial: Partial<Product>; onClose:
             <legend className="px-2 font-bold">{lang === "ar" ? "العربية" : lang === "fr" ? "Français" : "English"}</legend>
             <input className="input-field" placeholder="اسم المنتج" value={translations?.[lang]?.name ?? ""} onChange={(e) => setTranslations((old) => ({ ...old, [lang]: { name: e.target.value, description: old?.[lang]?.description ?? "", features: old?.[lang]?.features ?? [] } }))} />
             <textarea className="input-field" rows={2} placeholder="الوصف" value={translations?.[lang]?.description ?? ""} onChange={(e) => setTranslations((old) => ({ ...old, [lang]: { name: old?.[lang]?.name ?? "", description: e.target.value, features: old?.[lang]?.features ?? [] } }))} />
-            <textarea className="input-field" rows={2} placeholder="المميزات (كل ميزة في سطر)" value={(translations?.[lang]?.features ?? []).join("\\n")} onChange={(e) => setTranslations((old) => ({ ...old, [lang]: { name: old?.[lang]?.name ?? "", description: old?.[lang]?.description ?? "", features: e.target.value.split("\\n").map((x) => x.trim()).filter(Boolean) } }))} />
+            <textarea className="input-field" rows={2} placeholder="المميزات (كل ميزة في سطر)" value={(translations?.[lang]?.features ?? []).join("\n")} onChange={(e) => setTranslations((old) => ({ ...old, [lang]: { name: old?.[lang]?.name ?? "", description: old?.[lang]?.description ?? "", features: e.target.value.split("\n").map((x) => x.trim()).filter(Boolean) } }))} />
           </fieldset>
         ))}
         {translationError && <p className="text-sm text-destructive">تعذرت الترجمة التلقائية: {translationError}. يمكنك كتابة أسماء المنتجات باللغات الثلاث أعلاه ثم الضغط على حفظ.</p>
