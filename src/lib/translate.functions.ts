@@ -22,7 +22,7 @@ const translationSchema = {
 };
 
 export const translateProduct = createServerFn({ method: "POST" })
-  .inputValidator((d: Fields) => ({
+  .validator((d: Fields) => ({
     name: String(d.name ?? "").slice(0, 300),
     description: String(d.description ?? "").slice(0, 4000),
     features: (Array.isArray(d.features) ? d.features : []).slice(0, 40).map((f) => String(f).slice(0, 300)),
@@ -41,7 +41,7 @@ export const translateProduct = createServerFn({ method: "POST" })
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          model: "openai/gpt-6-luna-fast",
+          model: "openai/gpt-5-mini",
           messages: [
             {
               role: "system",
