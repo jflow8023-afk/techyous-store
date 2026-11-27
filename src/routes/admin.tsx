@@ -155,6 +155,8 @@ function ProductForm({ initial, onClose }: { initial: Partial<Product>; onClose:
   const [p, setP] = useState({ ...initial, category: normalizeCategory(initial.category ?? "tv") });
   const [feat, setFeat] = useState((initial.features ?? []).join("\n"));
   const [busy, setBusy] = useState(false);
+  const [translations, setTranslations] = useState<Product["tr"]>(initial.tr ?? {});
+  const [translationError, setTranslationError] = useState("");
   const upload = async (files: FileList | null) => {
     if (!files) return;
     const urls = await Promise.all([...files].map((f) => fileToDataUrl(f)));
@@ -197,7 +199,16 @@ function ProductForm({ initial, onClose }: { initial: Partial<Product>; onClose:
             <label className="grid h-16 w-16 cursor-pointer place-items-center rounded-lg border border-dashed text-muted-foreground hover:border-primary"><Plus className="h-5 w-5" /><input type="file" accept="image/*" multiple hidden onChange={(e) => upload(e.target.files)} /></label>
           </div>
         </div>
-        <p className="text-xs text-muted-foreground">سيتم إنشاء ترجمات المنتج تلقائياً إلى العربية والفرنسية والإنجليزية عند الحفظ، لتظهر حسب لغة الزبون.</p>
+        <p className="text-xs text-muted-foreground">اكتب الترجمات يدوياً أدناه، أو اتركها فارغة لتوليدها تلقائياً عند الحفظ. يمكنك تعديل كل لغة في أي وقت.</p>
+        {(["ar", "fr", "en"] as const).map((lang) => (
+          <fieldset key={lang} className="space-y-2 rounded-xl border p-3">
+            <legend className="px-2 font-bold">{lang === "ar" ? "العربية" : lang === "fr" ? "Français" : "English"}</legend>
+            <input className="input-field" placeholder="اسم المنتج" value={translations?.[lang]?.name ?? ""} onChange={(e) => setTranslations((old) => ({ ...old, [lang]: { name: e.target.value, description: old?.[lang]?.description ?? "", features: old?.[lang]?.features ?? [] } }))} />
+            <textarea className="input-field" rows={2} placeholder="الوصف" value={translations?.[lang]?.description ?? ""} onChange={(e) => setTranslations((old) => ({ ...old, [lang]: { name: old?.[lang]?.name ?? "", description: e.target.value, features: old?.[lang]?.features ?? [] } }))} />
+            <textarea className="input-field" rows={2} placeholder="المميزات (كل ميزة في سطر)" value={(translations?.[lang]?.features ?? []).join("\\n")} onChange={(e) => setTranslations((old) => ({ ...old, [lang]: { name: old?.[lang]?.name ?? "", description: old?.[lang]?.description ?? "", features: e.target.value.split("\\n").map((x) => x.trim()).filter(Boolean) } }))} />
+          </fieldset>
+        ))}
+        {translationError && <p className="text-sm text-destructive">تعذرت الترجمة التلقائية: {translationError}. يمكنك كتابة أسماء المنتجات باللغات الثلاث أعلاه ثم الضغط على حفظ.</p>
         <button type="submit" disabled={busy} className="btn-primary w-full py-3 disabled:opacity-60">{busy ? "جارٍ الترجمة والحفظ..." : "حفظ"}</button>
       </form>
     </div>
