@@ -1,5 +1,3 @@
-import { useEffect } from "react";
-import { translateProduct } from "./translate.functions";
 import { actions, useStore, type Product } from "./store";
 import { normalizeCategory } from "./categories";
 
@@ -92,26 +90,9 @@ export const CAT_LABELS: Record<string, Record<Lang, string>> = {
   gaming: { ar: "إكسسوارات الألعاب", fr: "Accessoires Gaming", en: "Gaming Accessories" },
 };
 
-const translationRequests = new Set<string>();
-
 export function useT() {
   const lang = useStore((s) => s.lang);
-  const products = useStore((s) => s.products);
-  useEffect(() => {
-    const missing = products.filter((p) => !p.tr?.[lang]);
-    for (const product of missing) {
-      const key = product.id + ":" + lang;
-      if (translationRequests.has(key)) continue;
-      translationRequests.add(key);
-      void translateProduct({ data: { name: product.name, description: product.description, features: product.features } })
-        .then((result) => {
-          if (result.ok) actions.setProductTranslations(product.id, result.tr);
-        })
-        .catch((error) => console.error("Product language translation failed:", error))
-        .finally(() => translationRequests.delete(key));
-    }
-  }, [lang, products]);
-  const t = (k: Key, vars?: Record<string, string | number>) => {
+  const t == (k: Key, vars?: Record<string, string | number>) => {
     let s: string = dict[k][lang];
     if (vars) for (const [a, b] of Object.entries(vars)) s = s.replace(`{${a}}`, String(b));
     return s;
