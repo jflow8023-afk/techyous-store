@@ -7,6 +7,7 @@ import tvbox from "@/assets/tvbox.jpg";
 import smartwatch from "@/assets/smartwatch.jpg";
 
 import { CATEGORIES, normalizeCategory } from "./categories";
+import { loadCloudProducts, loadCloudOrders, saveCloudProduct, deleteCloudProduct, createCloudOrder, updateCloudOrderStatus, deleteCloudOrder } from "./cloud-store";
 export { CATEGORIES } from "./categories";
 
 export type Product = {
@@ -54,6 +55,7 @@ const seedTr = Object.fromEntries(seed.map((p) => [p.id, p.tr]));
 const initial: State = { products: seed, orders: [], cart: [], cartOpen: false, lang: "ar" };
 let state: State = initial;
 let loaded = false;
+let cloudLoading = false;
 const listeners = new Set<() => void>();
 
 function load() {
@@ -66,13 +68,24 @@ function load() {
       state.products = state.products.map((p) => (p.tr || !seedTr[p.id] ? p : { ...p, tr: seedTr[p.id] }));
     }
   } catch {}
+  if (!cloudLoading) {
+    cloudLoading = true;
+    void Promise.all([loadCloudProducts(), loadCloudOrders()]).then(([products, orders]) => {
+      state = { ...state, products: products.length ? products : state.products, orders };
+      persistState();
+      listeners.forEach((l) => l());
+    }).catch((error) => console.error("TechYous cloud sync failed", error));
+  }
 }
-function set(fn: (s: State) => Partial<State>) {
-  state = { ...state, ...fn(state) };
+function persistState() {
   try {
     const { cartOpen, ...persist } = state;
     localStorage.setItem(KEY, JSON.stringify(persist));
-  } catch { alert("مساحة التخزين ممتلئة، جرّب صوراً أصغر."); }
+  } catch { console.warn("TechYous local cache could not be saved"); }
+}
+function set(fn: (s: State) => Partial<State>) {
+  state = { ...state, ...fn(state) };
+  persistState();
   listeners.forEach((l) => l());
 }
 
@@ -96,26 +109,37 @@ export const actions = {
   setQty: (productId: string, qty: number) => set((s) => ({
     cart: qty <= 0 ? s.cart.filter((c) => c.productId !== productId) : s.cart.map((c) => c.productId === productId ? { ...c, qty } : c),
   })),
-  placeOrder: (customer: Order["customer"], cityId: string) => {
+  placeOrder: async (customer: Order["customer"], cityId: string) => {
     const id = "TY-" + Date.now().toString().slice(-6);
-    set((s) => {
-      const items = s.cart.map((c) => { const p = s.products.find((x) => x.id === c.productId)!; return { productId: p.id, name: p.name, price: p.price, qty: c.qty }; }).filter(Boolean);
-      const subtotal = items.reduce((a, i) => a + i.price * i.qty, 0);
-      const shipping = shippingFor(cityId);
-      return {
-        orders: [{ id, createdAt: Date.now(), status: "pending", subtotal, shipping, total: subtotal + shipping, customer, items }, ...s.orders],
-        products: s.products.map((p) => { const it = items.find((i) => i.productId === p.id); return it ? { ...p, stock: Math.max(0, p.stock - it.qty) } : p; }),
-        cart: [],
-      };
-    });
+    const items = state.cart.map((c) => { const p = state.products.find((x) => x.id === c.productId); return p ? { productId: p.id, name: p.name, price: p.price, qty: c.qty } : null; }).filter((x): x is NonNullable<typeof x> => Boolean(x));
+    const subtotal = items.reduce((a, i) => a + i.price * i.qty, 0);
+    const shipping = shippingFor(cityId);
+    const order: Order = { id, createdAt: Date.now(), status: "pending", subtotal, shipping, total: subtotal + shipping, customer, items };
+    await createCloudOrder(order);
+    set((s) => ({
+      orders: [order, ...s.orders],
+      products: s.products.map((p) => { const it = items.find((i) => i.productId === p.id); return it ? { ...p, stock: Math.max(0, p.stock - it.qty) } : p; }),
+      cart: [],
+    }));
     return id;
   },
-  saveProduct: (p: Omit<Product, "id"> & { id?: string }) => set((s) => p.id
-    ? { products: s.products.map((x) => x.id === p.id ? (p as Product) : x) }
-    : { products: [{ ...p, id: uid() }, ...s.products] }),
-  deleteProduct: (id: string) => set((s) => ({ products: s.products.filter((p) => p.id !== id), cart: s.cart.filter((c) => c.productId !== id) })),
-  setOrderStatus: (id: string, status: OrderStatus) => set((s) => ({ orders: s.orders.map((o) => o.id === id ? { ...o, status } : o) })),
-  deleteOrder: (id: string) => set((s) => ({ orders: s.orders.filter((o) => o.id !== id) })),
+  saveProduct: async (p: Omit<Product, "id"> & { id?: string }) => {
+    const product = p.id ? p as Product : { ...p, id: uid() } as Product;
+    await saveCloudProduct(product);
+    set((s) => ({ products: p.id ? s.products.map((x) => x.id === product.id ? product : x) : [product, ...s.products] }));
+  },
+  deleteProduct: async (id: string) => {
+    await deleteCloudProduct(id);
+    set((s) => ({ products: s.products.filter((p) => p.id !== id), cart: s.cart.filter((c) => c.productId !== id) }));
+  },
+  setOrderStatus: async (id: string, status: OrderStatus) => {
+    await updateCloudOrderStatus(id,status);
+    set((s) => ({ orders: s.orders.map((o) => o.id === id ? { ...o, status } : o) }));
+  },
+  deleteOrder: async (id: string) => {
+    await deleteCloudOrder(id);
+    set((s) => ({ orders: s.orders.filter((o) => o.id !== id) }));
+  },
 };
 
 export const formatMAD = (n: number) => `${n.toLocaleString("fr-MA")} درهم`;
