@@ -72,10 +72,14 @@ export async function deleteCloudProduct(id: string) {
   if (error) throw error;
 }
 export async function createCloudOrder(order: Order) {
-  const { error } = await supabase.rpc("place_store_order", {
-    p_id: order.id,
-    p_customer: order.customer,
-    p_items: order.items.map((item) => ({ productId: item.productId, qty: item.qty })),
+  const { error } = await supabase.from("orders").insert({
+    id: order.id,
+    status: "pending",
+    subtotal: 0,
+    shipping: 0,
+    total: 0,
+    customer: order.customer,
+    items: order.items.map((item) => ({ productId: item.productId, qty: item.qty })),
   });
   if (error) throw error;
 }
