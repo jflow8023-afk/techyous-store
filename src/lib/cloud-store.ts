@@ -37,6 +37,14 @@ async function uploadImage(src: string, index: number) {
   return supabase.storage.from("product-images").getPublicUrl(path).data.publicUrl;
 }
 
+export async function migrateLocalProductsIfCloudIsEmpty(localProducts: Product[]) {
+  if (!(await isStoreAdmin())) return;
+  const { data, error } = await supabase.from("products").select("id").limit(1);
+  if (error) throw error;
+  if ((data ?? []).length) return;
+  for (const product of localProducts) await saveCloudProduct(product);
+}
+
 export async function loadCloudProducts() {
   const admin = await isStoreAdmin();
   let query = supabase.from("products").select("*").order("created_at",{ascending:false});
@@ -63,9 +71,10 @@ export async function deleteCloudProduct(id: string) {
   if (error) throw error;
 }
 export async function createCloudOrder(order: Order) {
-  const { error } = await supabase.from("orders").insert({
-    id:order.id,status:"pending",subtotal:order.subtotal ?? order.total,
-    shipping:order.shipping ?? 0,total:order.total,customer:order.customer,items:order.items,
+  const { error } = await supabase.rpc("place_store_order", {
+    p_id: order.id,
+    p_customer: order.customer,
+    p_items: order.items.map((item) => ({ productId: item.productId, qty: item.qty })),
   });
   if (error) throw error;
 }
