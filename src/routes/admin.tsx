@@ -225,7 +225,7 @@ function ProductForm({ initial, onClose }: { initial: Partial<Product>; onClose:
             <textarea className="input-field" rows={2} placeholder="المميزات (كل ميزة في سطر)" value={(translations?.[lang]?.features ?? []).join("\n")} onChange={(e) => setTranslations((old) => ({ ...old, [lang]: { name: old?.[lang]?.name ?? "", description: old?.[lang]?.description ?? "", features: e.target.value.split("\n").map((x) => x.trim()).filter(Boolean) } }))} />
           </fieldset>
         ))}
-        {translationError && <p className="text-sm text-destructive">تعذرت الترجمة التلقائية: {translationError}. يمكنك كتابة أسماء المنتجات باللغات الثلاث أعلاه ثم الضغط على حفظ.</p>
+        {translationError && <p className="text-sm text-destructive">تعذرت الترجمة التلقائية: {translationError}. يمكنك كتابة أسماء المنتجات باللغات الثلاث أعلاه ثم الضغط على حفظ.</p>}
         <button type="submit" disabled={busy} className="btn-primary w-full py-3 disabled:opacity-60">{busy ? "جارٍ الترجمة والحفظ..." : "حفظ"}</button>
       </form>
     </div>
