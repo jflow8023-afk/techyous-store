@@ -98,7 +98,6 @@ export function useT() {
   const lang = useStore((s) => s.lang);
   const products = useStore((s) => s.products);
   useEffect(() => {
-    let cancelled = false;
     const missing = products.filter((p) => !p.tr?.[lang]);
     for (const product of missing) {
       const key = product.id + ":" + lang;
@@ -106,12 +105,11 @@ export function useT() {
       translationRequests.add(key);
       void translateProduct({ data: { name: product.name, description: product.description, features: product.features } })
         .then((result) => {
-          if (!cancelled && result.ok) actions.setProductTranslations(product.id, result.tr);
+          if (result.ok) actions.setProductTranslations(product.id, result.tr);
         })
         .catch((error) => console.error("Product language translation failed:", error))
         .finally(() => translationRequests.delete(key));
     }
-    return () => { cancelled = true; };
   }, [lang, products]);
   const t = (k: Key, vars?: Record<string, string | number>) => {
     let s: string = dict[k][lang];
