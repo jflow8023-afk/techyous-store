@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { BarChart3, Package, ShoppingBag, LogOut, Plus, Pencil, Trash2, X, Lock, Phone, MapPin } from "lucide-react";
 import { actions, CATEGORIES, catLabel, fileToDataUrl, formatMAD, useStore, type OrderStatus, type Product } from "@/lib/store";
 import { normalizeCategory } from "@/lib/categories";
+import { supabase, isStoreAdmin, sendAdminSignInLink, signOutAdmin } from "@/lib/supabase";
+import { refreshCloudData } from "@/lib/store";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({
@@ -20,7 +22,6 @@ export const Route = createFileRoute("/admin")({
   component: AdminPage,
 });
 
-const PIN = "101528";
 const STATUS: Record<OrderStatus, { label: string; cls: string }> = {
   pending: { label: "قيد الانتظار", cls: "bg-warning/20 text-warning" },
   shipped: { label: "تم الشحن", cls: "bg-primary/20 text-primary" },
@@ -29,25 +30,52 @@ const STATUS: Record<OrderStatus, { label: string; cls: string }> = {
 
 function AdminPage() {
   const [authed, setAuthed] = useState(false);
-  useEffect(() => { setAuthed(sessionStorage.getItem("ty-admin") === "1"); }, []);
-  if (!authed) return <PinGate onOk={() => { sessionStorage.setItem("ty-admin", "1"); setAuthed(true); }} />;
-  return <Dashboard onLogout={() => { sessionStorage.removeItem("ty-admin"); setAuthed(false); }} />;
+  const [checking, setChecking] = useState(true);
+  useEffect(() => {
+    let alive = true;
+    const check = async () => {
+      const ok = await isStoreAdmin();
+      if (alive) {
+        setAuthed(ok);
+        setChecking(false);
+        if (ok) await refreshCloudData();
+      }
+    };
+    void check();
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+      const ok = session?.user?.email?.toLowerCase() === "jflow8023@gmail.com";
+      setAuthed(ok);
+      if (ok) window.setTimeout(() => { void refreshCloudData(); }, 0);
+    });
+    return () => { alive = false; data.subscription.unsubscribe(); };
+  }, []);
+  if (checking) return <div className="flex min-h-screen items-center justify-center text-muted-foreground">جارٍ التحقق من الدخول...</div>;
+  if (!authed) return <AdminLogin />;
+  return <Dashboard onLogout={async () => { await signOutAdmin(); setAuthed(false); }} />;
 }
 
-function PinGate({ onOk }: { onOk: () => void }) {
-  const [pin, setPin] = useState("");
-  const [err, setErr] = useState(false);
-  useEffect(() => { if (pin.length === 6) { if (pin === PIN) onOk(); else { setErr(true); setPin(""); } } }, [pin]);
+function AdminLogin() {
+  const [email, setEmail] = useState("jflow8023@gmail.com");
+  const [busy, setBusy] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [err, setErr] = useState("");
   return (
     <div className="flex min-h-screen items-center justify-center bg-glow px-4">
-      <div className="w-full max-w-sm rounded-2xl border bg-card p-6 text-center shadow-glow">
+      <form onSubmit={async (e) => {
+        e.preventDefault(); setBusy(true); setErr("");
+        try { await sendAdminSignInLink(email); setSent(true); }
+        catch (error) { setErr(error instanceof Error ? error.message : "تعذر إرسال رابط الدخول."); }
+        finally { setBusy(false); }
+      }} className="w-full max-w-sm rounded-2xl border bg-card p-6 text-center shadow-glow">
         <Lock className="mx-auto h-10 w-10 text-primary" />
         <h1 className="mt-3 text-xl font-bold">دخول المسؤول</h1>
-        <p className="mt-1 text-sm text-muted-foreground">أدخل الرمز السري المكون من 6 أرقام</p>
-        <input autoFocus dir="ltr" inputMode="numeric" maxLength={6} value={pin} onChange={(e) => { setErr(false); setPin(e.target.value.replace(/\D/g, "")); }} className="input-field mt-5 text-center text-2xl tracking-[0.6em]" placeholder="••••••" />
-        {err && <p className="mt-2 text-sm text-destructive">الرمز غير صحيح</p>}
+        <p className="mt-1 text-sm text-muted-foreground">سنرسل رابط دخول آمن إلى بريد صاحب المتجر</p>
+        <input required type="email" dir="ltr" value={email} onChange={(e) => setEmail(e.target.value)} className="input-field mt-5 text-center" />
+        {sent && <p className="mt-3 text-sm text-success">تم إرسال رابط الدخول. افتح بريدك واضغط على الرابط للمتابعة.</p>}
+        {err && <p className="mt-3 text-sm text-destructive">{err}</p>}
+        <button disabled={busy} className="btn-primary mt-4 w-full py-3 disabled:opacity-60">{busy ? "جارٍ الإرسال..." : "إرسال رابط الدخول"}</button>
         <Link to="/" className="mt-5 inline-block text-sm text-muted-foreground hover:text-primary">العودة للمتجر</Link>
-      </div>
+      </form>
     </div>
   );
 }
