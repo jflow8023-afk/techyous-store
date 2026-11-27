@@ -170,8 +170,9 @@ function ProductForm({ initial, onClose }: { initial: Partial<Product>; onClose:
           const r = await translateProduct({ data: { name: p.name ?? "", description: p.description ?? "", features } }).catch(() => null);
           try {
             await actions.saveProduct({ ...(p as Product), features, tr: r?.ok ? r.tr : p.tr });
-            // Product persistence is independent from optional AI translation.
-            // Close the form after a successful save without showing a misleading error alert.
+            if (!r?.ok && !p.tr) {
+              alert("تم حفظ المنتج بنجاح، لكن خدمة الترجمة لم تستجب هذه المرة. يمكنك إعادة فتح المنتج وحفظه لاحقاً لإعادة المحاولة.");
+            }
             onClose();
           } catch (error) {
             alert(error instanceof Error ? "تعذر حفظ المنتج: " + error.message : "تعذر حفظ المنتج");
