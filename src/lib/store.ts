@@ -97,6 +97,13 @@ export function useStore<T>(sel: (s: State) => T): T {
   );
 }
 
+export async function refreshCloudData() {
+  const [products, orders] = await Promise.all([loadCloudProducts(), loadCloudOrders()]);
+  state = { ...state, products: products.length ? products : state.products, orders };
+  persistState();
+  listeners.forEach((l) => l());
+}
+
 const uid = () => Math.random().toString(36).slice(2, 9);
 
 export const actions = {
