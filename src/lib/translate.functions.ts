@@ -53,8 +53,7 @@ export const translateProduct = createServerFn({ method: "POST" })
             type: "json_schema",
             json_schema: { name: "product_translations", strict: true, schema: translationSchema },
           },
-          temperature: 0.2,
-          max_tokens: 2200,
+          max_completion_tokens: 2200,
         }),
       });
 
