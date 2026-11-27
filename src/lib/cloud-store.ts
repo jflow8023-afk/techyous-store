@@ -3,7 +3,7 @@ import type { Product, Order, OrderStatus } from "./store";
 
 type DbProduct = {
   id: string; name: string; category: string; price: number; stock: number;
-  images: string[]; description: string; features: string[]; translations: Product["tr"];
+  images: string[]; description: string; features: string[]; translations: Product["tr"] | null;
   active: boolean;
 };
 type DbOrder = {
@@ -25,7 +25,8 @@ const fromProduct = (p: Product): DbProduct => ({
 });
 
 async function uploadImage(src: string, index: number) {
-  if (!src.startsWith("data:")) return src;
+  const isLocalAsset = src.startsWith("/") || src.startsWith("data:");
+  if (!isLocalAsset) return src;
   const response = await fetch(src);
   const blob = await response.blob();
   const ext = blob.type === "image/png" ? "png" : blob.type === "image/webp" ? "webp" : "jpg";
