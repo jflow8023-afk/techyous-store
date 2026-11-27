@@ -7,7 +7,7 @@ import tvbox from "@/assets/tvbox.jpg";
 import smartwatch from "@/assets/smartwatch.jpg";
 
 import { CATEGORIES, normalizeCategory } from "./categories";
-import { loadCloudProducts, loadCloudOrders, saveCloudProduct, deleteCloudProduct, createCloudOrder, updateCloudOrderStatus, deleteCloudOrder } from "./cloud-store";
+import { loadCloudProducts, loadCloudOrders, saveCloudProduct, deleteCloudProduct, createCloudOrder, updateCloudOrderStatus, deleteCloudOrder, migrateLocalProductsIfCloudIsEmpty } from "./cloud-store";
 export { CATEGORIES } from "./categories";
 
 export type Product = {
@@ -98,6 +98,7 @@ export function useStore<T>(sel: (s: State) => T): T {
 }
 
 export async function refreshCloudData() {
+  await migrateLocalProductsIfCloudIsEmpty(state.products);
   const [products, orders] = await Promise.all([loadCloudProducts(), loadCloudOrders()]);
   state = { ...state, products: products.length ? products : state.products, orders };
   persistState();
