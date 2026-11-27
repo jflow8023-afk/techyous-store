@@ -171,7 +171,7 @@ function ProductForm({ initial, onClose }: { initial: Partial<Product>; onClose:
           setBusy(true);
           try {
             let tr = translations;
-            const complete = (["ar", "fr", "en"] as const).every((lang) => Boolean(tr?.[lang]?.name?.trim() && tr?.[lang]?.description?.trim()));
+            const complete = (["ar", "fr", "en"] as const).every((lang) => Boolean(tr?.[lang]?.name?.trim() && tr?.[lang]?.description?.trim() && Array.isArray(tr?.[lang]?.features)));
             if (!complete) {
               const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
               if (sessionError || !sessionData.session?.access_token) {
@@ -200,14 +200,14 @@ function ProductForm({ initial, onClose }: { initial: Partial<Product>; onClose:
         }}
         className="max-h-[92vh] w-full max-w-lg space-y-3 overflow-y-auto rounded-t-2xl border bg-popover p-5 sm:rounded-2xl">
         <div className="flex items-center justify-between"><h3 className="text-lg font-bold">{p.id ? "تعديل المنتج" : "منتج جديد"}</h3><button type="button" onClick={onClose}><X className="h-5 w-5" /></button></div>
-        <input required placeholder="اسم المنتج" value={p.name} onChange={(e) => setP({ ...p, name: e.target.value })} className="input-field" />
+        <input required placeholder="اسم المنتج" value={p.name} onChange={(e) => { setP({ ...p, name: e.target.value }); setTranslations({}); }} className="input-field" />
         <div className="grid grid-cols-3 gap-2">
           <select value={p.category} onChange={(e) => setP({ ...p, category: e.target.value })} className="input-field col-span-3 sm:col-span-1">{CATEGORIES.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}</select>
           <label className="col-span-3 text-xs sm:col-span-1">السعر (درهم)<input required type="number" min={0} value={p.price} onChange={(e) => setP({ ...p, price: +e.target.value })} className="input-field" /></label>
           <label className="col-span-3 text-xs sm:col-span-1">المخزون<input required type="number" min={0} value={p.stock} onChange={(e) => setP({ ...p, stock: +e.target.value })} className="input-field" /></label>
         </div>
-        <textarea placeholder="الوصف" rows={2} value={p.description} onChange={(e) => setP({ ...p, description: e.target.value })} className="input-field" />
-        <textarea placeholder="المميزات (ميزة في كل سطر)" rows={3} value={feat} onChange={(e) => setFeat(e.target.value)} className="input-field" />
+        <textarea placeholder="الوصف" rows={2} value={p.description} onChange={(e) => { setP({ ...p, description: e.target.value }); setTranslations({}); }} className="input-field" />
+        <textarea placeholder="المميزات (ميزة في كل سطر)" rows={3} value={feat} onChange={(e) => { setFeat(e.target.value); setTranslations({}); }} className="input-field" />
         <div>
           <div className="flex flex-wrap gap-2">{p.images?.map((src, i) => (
             <div key={i} className="relative"><img src={src} alt="" className="h-16 w-16 rounded-lg object-cover" />
