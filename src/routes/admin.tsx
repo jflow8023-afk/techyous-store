@@ -170,7 +170,8 @@ function ProductForm({ initial, onClose }: { initial: Partial<Product>; onClose:
           const r = await translateProduct({ data: { name: p.name ?? "", description: p.description ?? "", features } }).catch(() => null);
           try {
             await actions.saveProduct({ ...(p as Product), features, tr: r?.ok ? r.tr : undefined });
-            if (!r?.ok) alert("تم الحفظ، لكن تعذّرت الترجمة التلقائية. أعد الحفظ لاحقاً للترجمة.");
+            // Product persistence is independent from optional AI translation.
+            // Close the form after a successful save without showing a misleading error alert.
             onClose();
           } catch (error) {
             alert(error instanceof Error ? "تعذر حفظ المنتج: " + error.message : "تعذر حفظ المنتج");
@@ -194,7 +195,7 @@ function ProductForm({ initial, onClose }: { initial: Partial<Product>; onClose:
             <label className="grid h-16 w-16 cursor-pointer place-items-center rounded-lg border border-dashed text-muted-foreground hover:border-primary"><Plus className="h-5 w-5" /><input type="file" accept="image/*" multiple hidden onChange={(e) => upload(e.target.files)} /></label>
           </div>
         </div>
-        <p className="text-xs text-muted-foreground">يُترجم المنتج تلقائياً إلى العربية والفرنسية والإنجليزية عند الحفظ.</p>
+        <p className="text-xs text-muted-foreground">يُحفظ المنتج في المتجر. الترجمة التلقائية إلى اللغات الأخرى غير مفعّلة حالياً.</p>
         <button type="submit" disabled={busy} className="btn-primary w-full py-3 disabled:opacity-60">{busy ? "جارٍ الترجمة والحفظ..." : "حفظ"}</button>
       </form>
     </div>
