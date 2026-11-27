@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 
-type Fields = { name: string; description: string; features: string[] };
+type Fields = { name: string; description: string; features: string[]; accessToken: string };
 export type Translations = { ar: Fields; fr: Fields; en: Fields };
 
 const fieldsSchema = {
@@ -26,10 +26,18 @@ export const translateProduct = createServerFn({ method: "POST" })
     name: String(d.name ?? "").slice(0, 300),
     description: String(d.description ?? "").slice(0, 4000),
     features: (Array.isArray(d.features) ? d.features : []).slice(0, 40).map((f) => String(f).slice(0, 300)),
+    accessToken: String(d.accessToken ?? ""),
   }))
   .handler(async ({ data }): Promise<{ ok: true; tr: Translations } | { ok: false; error: string }> => {
-    // Vercel injects this short-lived credential into server deployments.
+    // Verify the signed-in store owner before spending AI Gateway credits.
     // An explicit gateway key can also be used for non-Vercel environments.
+    const { createClient } = await import("@supabase/supabase-js");
+    const supabaseUrl = process.env.VITE_SUPABASE_URL;
+    const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY;
+    if (!supabaseUrl || !supabaseAnonKey || !data.accessToken) return { ok: false, error: "يجب تسجيل الدخول بحساب الإدارة أولاً." };
+    const authClient = createClient(supabaseUrl, supabaseAnonKey, { auth: { persistSession: false, autoRefreshToken: false } });
+    const { data: authData, error: authError } = await authClient.auth.getUser(data.accessToken);
+    if (authError || authData.user?.email?.toLowerCase() !== "jflow8023@gmail.com") return { ok: false, error: "غير مسموح: يجب استعمال بريد صاحب المتجر." };
     const token = process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN;
     if (!token) return { ok: false, error: "AI Gateway authentication is not configured" };
 
