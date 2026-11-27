@@ -171,9 +171,19 @@ function ProductForm({ initial, onClose }: { initial: Partial<Product>; onClose:
           setBusy(true);
           try {
             let tr = translations;
-            const complete = (["ar", "fr", "en"] as const).every((lang) => Boolean(tr?.[lang]?.name?.trim()));
+            const complete = (["ar", "fr", "en"] as const).every((lang) => Boolean(tr?.[lang]?.name?.trim() && tr?.[lang]?.description?.trim()));
             if (!complete) {
-              const r = await translateProduct({ data: { name: p.name ?? "", description: p.description ?? "", features } });
+              const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+              if (sessionError || !sessionData.session?.access_token) {
+                setTranslationError("انتهت جلسة الإدارة. سجّل الدخول مجدداً ثم أعد المحاولة.");
+                return;
+              }
+              const r = await translateProduct({ data: {
+                name: p.name ?? "",
+                description: p.description ?? "",
+                features,
+                accessToken: sessionData.session.access_token,
+              } });
               if (!r.ok) {
                 setTranslationError(r.error);
                 return;
@@ -206,7 +216,7 @@ function ProductForm({ initial, onClose }: { initial: Partial<Product>; onClose:
             <label className="grid h-16 w-16 cursor-pointer place-items-center rounded-lg border border-dashed text-muted-foreground hover:border-primary"><Plus className="h-5 w-5" /><input type="file" accept="image/*" multiple hidden onChange={(e) => upload(e.target.files)} /></label>
           </div>
         </div>
-        <p className="text-xs text-muted-foreground">اكتب الترجمات يدوياً أدناه، أو اتركها فارغة لتوليدها تلقائياً عند الحفظ. يمكنك تعديل كل لغة في أي وقت.</p>
+        <p className="text-xs text-muted-foreground">أدخل الترجمات يدوياً للغات الثلاث، أو اتركها فارغة ليتم توليدها تلقائياً عند الحفظ. لن يتم حفظ المنتج قبل اكتمال الترجمات.</p>
         {(["ar", "fr", "en"] as const).map((lang) => (
           <fieldset key={lang} className="space-y-2 rounded-xl border p-3">
             <legend className="px-2 font-bold">{lang === "ar" ? "العربية" : lang === "fr" ? "Français" : "English"}</legend>
