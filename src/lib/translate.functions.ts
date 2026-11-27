@@ -22,7 +22,7 @@ const translationSchema = {
 };
 
 export const translateProduct = createServerFn({ method: "POST" })
-  .validator((d: Fields) => ({
+  .inputValidator((d: Fields) => ({
     name: String(d.name ?? "").slice(0, 300),
     description: String(d.description ?? "").slice(0, 4000),
     features: (Array.isArray(d.features) ? d.features : []).slice(0, 40).map((f) => String(f).slice(0, 300)),
