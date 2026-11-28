@@ -32,12 +32,21 @@ export const translateProduct = createServerFn({ method: "POST" })
     // Verify the signed-in store owner before spending AI Gateway credits.
     // An explicit gateway key can also be used for non-Vercel environments.
     const { createClient } = await import("@supabase/supabase-js");
-    const supabaseUrl = process.env.VITE_SUPABASE_URL;
-    const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY;
-    if (!supabaseUrl || !supabaseAnonKey || !data.accessToken) return { ok: false, error: "يجب تسجيل الدخول بحساب الإدارة أولاً." };
-    const authClient = createClient(supabaseUrl, supabaseAnonKey, { auth: { persistSession: false, autoRefreshToken: false } });
+    const supabaseUrl = process.env.VITE_SUPABASE_URL || "https://cpimymezvuzrojepfwmv.supabase.co";
+    // Keep the server-side verifier on the exact same Supabase project/key
+    // configuration used by the browser client.
+    const supabasePublicKey = process.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || "sb_publishable_GZUPWac-nhXiJ3LUncP7PA_1Lq9HZDO";
+    if (!data.accessToken) return { ok: false, error: "انتهت جلسة الإدارة. سجّل الدخول مجدداً." };
+    const authClient = createClient(supabaseUrl, supabasePublicKey, { auth: { persistSession: false, autoRefreshToken: false } });
     const { data: authData, error: authError } = await authClient.auth.getUser(data.accessToken);
-    if (authError || authData.user?.email?.toLowerCase() !== "jflow8023@gmail.com") return { ok: false, error: "غير مسموح: يجب استعمال بريد صاحب المتجر." };
+    if (authError) {
+      console.error("Product translation owner verification failed:", authError.message);
+      return { ok: false, error: "تعذر التحقق من جلسة الإدارة. سجّل الخروج ثم ادخل مجدداً." };
+    }
+    if (authData.user?.email?.toLowerCase() !== "jflow8023@gmail.com") {
+      console.error("Product translation rejected non-owner email:", authData.user?.email ?? "missing email");
+      return { ok: false, error: "هذا الحساب ليس بريد صاحب المتجر. اخرج من لوحة الإدارة وادخل ببريد jflow8023@gmail.com." };
+    }
     // Vercel Functions expose the OIDC token on the incoming request context,
     // not necessarily through process.env. Resolve it with Vercel's runtime helper.
     let token = process.env.AI_GATEWAY_API_KEY;
