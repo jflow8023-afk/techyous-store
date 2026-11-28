@@ -106,7 +106,7 @@ export const translateProduct = createServerFn({ method: "POST" })
         tr[target] = {
           name: await translateText(data.name, target),
           description: await translateText(data.description, target),
-          features: await Promise.all(data.features.map((feature) => translateText(feature, target))),
+          features: await (async () => { const items: string[] = []; for (const feature of data.features) items.push(await translateText(feature, target)); return items; })(),
         };
       }
       return { ok: true, tr };
