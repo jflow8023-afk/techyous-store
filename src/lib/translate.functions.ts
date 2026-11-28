@@ -1,7 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 
-type Fields = { name: string; description: string; features: string[]; accessToken: string };
-export type Translations = { ar: Fields; fr: Fields; en: Fields };
+type TranslationFields = { name: string; description: string; features: string[] };
+type Fields = TranslationFields & { accessToken: string };
+export type Translations = { ar: TranslationFields; fr: TranslationFields; en: TranslationFields };
 
 const fieldsSchema = {
   type: "object",
@@ -106,7 +107,6 @@ export const translateProduct = createServerFn({ method: "POST" })
           name: await translateText(data.name, target),
           description: await translateText(data.description, target),
           features: await Promise.all(data.features.map((feature) => translateText(feature, target))),
-          accessToken: data.accessToken,
         };
       }
       return { ok: true, tr };
