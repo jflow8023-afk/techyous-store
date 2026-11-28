@@ -82,6 +82,42 @@ function AdminLogin() {
 
 function Dashboard({ onLogout }: { onLogout: () => void }) {
   const [tab, setTab] = useState<"stats" | "products" | "orders">("stats");
+  const [newOrders, setNewOrders] = useState(0);
+  const [orderNotice, setOrderNotice] = useState("");
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>(
+    typeof Notification === "undefined" ? "denied" : Notification.permission
+  );
+
+  useEffect(() => {
+    const channel = supabase
+      .channel("techyous-new-orders")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "orders" }, (payload) => {
+        const order = payload.new as { id?: string; customer?: { name?: string } };
+        setNewOrders((count) => count + 1);
+        setOrderNotice(`طلبية جديدة ${order.id ? `رقم ${order.id}` : ""} من ${order.customer?.name ?? "زبون"}`);
+        void refreshCloudData();
+        if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+          new Notification("طلبية جديدة على TechYous", {
+            body: `${order.customer?.name ?? "زبون"} · ${order.id ?? ""}`,
+            tag: order.id ?? "techyous-order",
+          });
+        }
+      })
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  }, []);
+
+  const enableNotifications = async () => {
+    if (typeof Notification === "undefined") {
+      alert("إشعارات المتصفح غير مدعومة هنا. افتح المتجر من Chrome.");
+      return;
+    }
+    const permission = await Notification.requestPermission();
+    setNotificationPermission(permission);
+    if (permission === "granted") {
+      new Notification("تم تفعيل إشعارات TechYous", { body: "ستظهر إشعارات الطلبات الجديدة أثناء فتح لوحة الإدارة." });
+    }
+  };
   const tabs = [
     { id: "stats", label: "الإحصائيات", icon: BarChart3 },
     { id: "products", label: "المنتجات", icon: Package },
@@ -92,13 +128,13 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
       <header className="sticky top-0 z-20 border-b bg-background/90 backdrop-blur">
         <div className="mx-auto grid max-w-7xl grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 sm:flex sm:justify-between">
           <Link to="/" className="min-w-0 truncate font-display text-xl font-black" dir="ltr">TECH<span className="text-primary">YOUS</span> <span className="text-sm text-muted-foreground">Admin</span></Link>
-          <button onClick={onLogout} className="flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm hover:bg-secondary"><LogOut className="h-4 w-4" /> خروج</button>
+          <div className="flex items-center gap-2"><button onClick={enableNotifications} className="rounded-lg border px-3 py-2 text-xs hover:bg-secondary">{notificationPermission === "granted" ? "الإشعارات مفعّلة" : "تفعيل إشعارات الهاتف"}</button><button onClick={onLogout} className="flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm hover:bg-secondary"><LogOut className="h-4 w-4" /> خروج</button></div>
         </div>
         <div className="mx-auto flex max-w-7xl gap-2 overflow-x-auto px-4 pb-3">
-          {tabs.map((t) => <button key={t.id} onClick={() => setTab(t.id)} className={`flex shrink-0 items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold ${tab === t.id ? "bg-primary text-primary-foreground" : "bg-secondary"}`}><t.icon className="h-4 w-4" />{t.label}</button>)}
+          {tabs.map((t) => <button key={t.id} onClick={() => { setTab(t.id); if (t.id === "orders") setNewOrders(0); }} className={`flex shrink-0 items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold ${tab === t.id ? "bg-primary text-primary-foreground" : "bg-secondary"}`}><t.icon className="h-4 w-4" />{t.label}{t.id === "orders" && newOrders > 0 && <span className="rounded-full bg-destructive px-2 py-0.5 text-xs text-white">{newOrders}</span>}</button>)}
         </div>
       </header>
-      <main className="mx-auto max-w-7xl px-4 py-6">{tab === "stats" ? <Stats /> : tab === "products" ? <Products /> : <Orders />}</main>
+      <main className="mx-auto max-w-7xl px-4 py-6">{orderNotice && <div role="status" className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-primary/40 bg-primary/10 p-3 text-sm font-semibold"><span>{orderNotice}</span><button onClick={() => { setTab("orders"); setNewOrders(0); setOrderNotice(""); }} className="shrink-0 rounded-lg bg-primary px-3 py-1.5 text-primary-foreground">عرض الطلبات</button><button onClick={() => setOrderNotice("")} aria-label="إغلاق" className="px-2">×</button></div>}{tab === "stats" ? <Stats /> : tab === "products" ? <Products /> : <Orders />}</main>
     </div>
   );
 }
