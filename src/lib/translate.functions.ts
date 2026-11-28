@@ -32,10 +32,10 @@ export const translateProduct = createServerFn({ method: "POST" })
     // Verify the signed-in store owner before spending AI Gateway credits.
     // An explicit gateway key can also be used for non-Vercel environments.
     const { createClient } = await import("@supabase/supabase-js");
-    const supabaseUrl = process.env.VITE_SUPABASE_URL || "https://cpimymezvuzrojepfwmv.supabase.co";
-    // Keep the server-side verifier on the exact same Supabase project/key
-    // configuration used by the browser client.
-    const supabasePublicKey = process.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || "sb_publishable_GZUPWac-nhXiJ3LUncP7PA_1Lq9HZDO";
+    const supabaseUrl = "https://cpimymezvuzrojepfwmv.supabase.co";
+    // Use the project's confirmed legacy anon JWT for server-side getUser.
+    // This is a public client key (RLS remains enforced); never use service_role here.
+    const supabasePublicKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNwaW15bWV6dnV6cm9qZXBmd212Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQ4MDQ2NDQsImV4cCI6MjExMDM4MDY0NH0.iMBL0znPiPFs7UGrOdUeETvU61HKvn_GyN4Y72Eq62Y";
     if (!data.accessToken) return { ok: false, error: "انتهت جلسة الإدارة. سجّل الدخول مجدداً." };
     const authClient = createClient(supabaseUrl, supabasePublicKey, { auth: { persistSession: false, autoRefreshToken: false } });
     const { data: authData, error: authError } = await authClient.auth.getUser(data.accessToken);
