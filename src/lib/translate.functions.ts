@@ -1,7 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 
-type Fields = { name: string; description: string; features: string[]; accessToken: string };
-export type Translations = { ar: Fields; fr: Fields; en: Fields };
+type TranslationFields = { name: string; description: string; features: string[] };
+type Fields = TranslationFields & { accessToken: string };
+export type Translations = { ar: TranslationFields; fr: TranslationFields; en: TranslationFields };
 
 const fieldsSchema = {
   type: "object",
@@ -47,67 +48,70 @@ export const translateProduct = createServerFn({ method: "POST" })
       console.error("Product translation rejected non-owner email:", authData.user?.email ?? "missing email");
       return { ok: false, error: "هذا الحساب ليس بريد صاحب المتجر. اخرج من لوحة الإدارة وادخل ببريد jflow8023@gmail.com." };
     }
-    // Vercel Functions expose the OIDC token on the incoming request context,
-    // not necessarily through process.env. Resolve it with Vercel's runtime helper.
-    let token = process.env.AI_GATEWAY_API_KEY;
-    if (!token) {
-      try {
-        const { getVercelOidcToken } = await import("@vercel/oidc");
-        token = await getVercelOidcToken();
-      } catch (error) {
-        console.error("Unable to obtain Vercel OIDC token for AI Gateway:", error);
-        return { ok: false, error: "تعذر الاتصال بخدمة الترجمة حالياً. حاول مرة أخرى بعد قليل." };
-      }
-    }
-    if (!token) return { ok: false, error: "خدمة الترجمة غير مهيأة على الخادم." };
+    // Free machine-translation fallback: MyMemory. No Vercel AI Gateway,
+    // credit card, or paid API key is required. Keep requests small to respect
+    // the provider's per-request limit.
+    const sourceText = [data.name, data.description, ...data.features].join(" ");
+    const hasArabic = /[\\u0600-\\u06FF]/.test(sourceText);
+    const frenchHints = /[àâçéèêëîïôùûüÿœ]|\\b(le|la|les|des|une|un|avec|pour|sans|compatible|manette|casque|écouteurs)\\b/i.test(sourceText);
+    const sourceLang = hasArabic ? "ar" : frenchHints ? "fr" : "en";
 
-    try {
-      const res = await fetch("https://ai-gateway.vercel.sh/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          model: "openai/gpt-5-mini",
-          messages: [
-            {
-              role: "system",
-              content: "You translate electronics store product listings into Arabic (clear Modern Standard Arabic suitable for Morocco), French, and English. Return only valid JSON matching the requested schema. Keep brand names, model numbers, and technical units such as 4K, HDMI, USB-C, GB, and W unchanged. Preserve the exact number and order of features. Do not invent specifications, warranties, compatibility, or claims. If the source is already in a target language, translate faithfully and polish lightly.",
-            },
-            { role: "user", content: JSON.stringify(data) },
-          ],
-          response_format: {
-            type: "json_schema",
-            json_schema: { name: "product_translations", strict: true, schema: translationSchema },
-          },
-          max_completion_tokens: 2200,
-        }),
-      });
-
-      if (!res.ok) {
-        const msg = await res.text().catch(() => "");
-        console.error("Product translation gateway error:", res.status, msg.slice(0, 300));
-        return { ok: false, error: `Translation service returned ${res.status}` };
-      }
-
-      const payload = await res.json() as {
-        choices?: Array<{ message?: { content?: string | null } }>;
-      };
-      const content = payload.choices?.[0]?.message?.content;
-      if (!content) return { ok: false, error: "Translation service returned an empty response" };
-
-      const parsed = JSON.parse(content) as Translations;
-      for (const lang of ["ar", "fr", "en"] as const) {
-        const item = parsed[lang];
-        if (!item || typeof item.name !== "string" || typeof item.description !== "string" ||
-          !Array.isArray(item.features) || item.features.some((x) => typeof x !== "string")) {
-          return { ok: false, error: "Translation response did not match the product schema" };
+    const splitForProvider = (value: string): string[] => {
+      const words = value.trim().split(/\\s+/);
+      const chunks: string[] = [];
+      let current = "";
+      for (const word of words) {
+        const candidate = current ? current + " " + word : word;
+        if (new TextEncoder().encode(candidate).length > 420 && current) {
+          chunks.push(current);
+          current = word;
+        } else {
+          current = candidate;
         }
       }
-      return { ok: true, tr: parsed };
+      if (current) chunks.push(current);
+      return chunks.length ? chunks : [""];
+    };
+
+    const translateText = async (value: string, target: "ar" | "fr" | "en"): Promise<string> => {
+      if (!value.trim() || target === sourceLang) return value;
+      const chunks = splitForProvider(value);
+      const translated: string[] = [];
+      for (const chunk of chunks) {
+        const params = new URLSearchParams({
+          q: chunk,
+          langpair: `${sourceLang}|${target}`,
+        });
+        const response = await fetch(`https://api.mymemory.translated.net/get?${params.toString()}`, {
+          headers: { Accept: "application/json" },
+          signal: AbortSignal.timeout(15000),
+        });
+        if (!response.ok) throw new Error(`MyMemory HTTP ${response.status}`);
+        const body = await response.json() as {
+          responseStatus?: number;
+          responseDetails?: string;
+          responseData?: { translatedText?: string };
+        };
+        if (Number(body.responseStatus) !== 200 || typeof body.responseData?.translatedText !== "string") {
+          throw new Error(body.responseDetails || "تعذرت خدمة الترجمة المجانية أو انتهى حدها اليومي.");
+        }
+        translated.push(body.responseData.translatedText);
+      }
+      return translated.join(" ");
+    };
+
+    try {
+      const tr = {} as Translations;
+      for (const target of ["ar", "fr", "en"] as const) {
+        tr[target] = {
+          name: await translateText(data.name, target),
+          description: await translateText(data.description, target),
+          features: await (async () => { const items: string[] = []; for (const feature of data.features) items.push(await translateText(feature, target)); return items; })(),
+        };
+      }
+      return { ok: true, tr };
     } catch (error) {
-      console.error("Product translation failed:", error);
-      return { ok: false, error: "Translation request failed" };
+      console.error("MyMemory product translation failed:", error);
+      return { ok: false, error: error instanceof Error ? `تعذرت خدمة الترجمة المجانية: ${error.message}` : "تعذرت خدمة الترجمة المجانية. حاول لاحقاً." };
     }
   });
